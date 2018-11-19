@@ -273,5 +273,5 @@ function formatWinsIn(winsIn) {
   Logger.log(hours + ' heures');
   Logger.log(minutes + ' min');
   
-  return hours+' heures et '+minutes;
+  return hours + ' heures et ' + minutes + ' minutes';
 }
