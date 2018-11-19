@@ -39,8 +39,26 @@ function computeImage(imgUrl) {
     try {
       var annotations = vision.responses[0].textAnnotations;
       console.log('annotations');
-      console.log(annotations)
-      var scores = annotations.slice(1,4).map(function(annotation) {
+      console.log(JSON.stringify(annotations));
+      
+      var rawScores = getRawScoresFromAnnotations(annotations);
+      console.log('rawScores');
+      console.log(JSON.stringify(rawScores));
+
+      var scores = annotations.filter(function(annotation) {
+        return (rawScores.indexOf(annotation.description) != -1);
+      });
+      console.log('scores');
+      console.log(JSON.stringify(scores));
+
+      scores.sort(function(a, b) {
+        if (!a) return false;
+        return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
+      });
+      console.log('new scores, sorted');
+      console.log(JSON.stringify(scores));
+      
+      scores = scores.map(function(annotation) {
         return { points: annotation.description };
       });
       if (scores.length !== 3) { throw new Error('Je ne trouve pas les scores'); }
@@ -50,18 +68,11 @@ function computeImage(imgUrl) {
       console.log('fullText');
       console.log(fullText);
       console.log('----------');
-      var rates = [];
-      var regex = /\+(\d{1,2})/;
-      fullText.split('\n').forEach(function(value) {
-        var match = regex.exec(value);
-        if (match) {
-          rates.push(match[1]);
-        }
-      });
+      var rates = getRates(fullText);
       if (rates.length !== 3) { throw new Error('Je ne trouve pas les taux.'); }
     } catch(e) {
       console.error(e.message);
-      throw new Error('Je ne trouve pas les infos.');
+      throw new Error('Je n\'arrive pas à trouver toutes les infos...');
     }
 
     scores[0].team = 'bleue';
@@ -74,7 +85,9 @@ function computeImage(imgUrl) {
     scores.forEach(function(guild) {
       guild.winsIn = winsIn(guild.points, guild.rate);
     }, this);
-
+    console.log(JSON.stringify(scores));
+    if (scores.some(function(score) { return (score.winsIn == 0); })) { throw new Error('Probablement une erreur...'); }
+    
     return scores;
   } catch(e) {
     Logger.log(JSON.stringify(e));
@@ -83,17 +96,7 @@ function computeImage(imgUrl) {
 }
 
 
-function testDownloadImg() {
-  Logger.log(downloadImg('https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B'));
-}
-function downloadImg(imgUrl) {
-  var http = UrlFetchApp.fetch(imgUrl);
-  var imgData = Utilities.base64Encode(http.getBlob().getBytes());
-  
-  return imgData;
-}
-
-
+/***********/
 function testVisionAPI() {
   var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
   var imgData = downloadImg(imgUrl);
@@ -107,7 +110,7 @@ function visionAPI(imgData) {
     'Content-Type': 'application/json'
   };
 
-  var payload = {"requests":[{"image":{"content":imgData},"features":[{"type":"TEXT_DETECTION"}]}]};
+  var payload = {"requests":[{"image":{"content":imgData},"features":[{"type":"DOCUMENT_TEXT_DETECTION"}]}]};
   var params = {
     method: 'post',
     headers: headers,
@@ -117,6 +120,91 @@ function visionAPI(imgData) {
   var http = UrlFetchApp.fetch(visionAPIURL, params);
   var data = http.getContentText();
   return JSON.parse(data);
+}
+
+
+function testScores() {
+  var annotations = [{"description":"123","boundingPoly":{"vertices":[{"x":50,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}},{"description":"456","boundingPoly":{"vertices":[{"x":20,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}},{"description":"789","boundingPoly":{"vertices":[{"x":10,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}}];
+
+  var rawScores = getRawScoresFromAnnotations(annotations);
+  var scores = annotations.filter(function(annotation) {
+    return (rawScores.indexOf(annotation.description) != -1);
+  });
+  
+  return scores.sort(function(a, b) {
+    Logger.log(a);
+    Logger.log(b);
+    if (!a) return false;
+    return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
+  });
+}
+
+
+function testGetRawScoresFromAnnotations() {
+  var annotations = [{"description":"123","boundingPoly":{"vertices":[{"x":50,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}},{"description":"456","boundingPoly":{"vertices":[{"x":20,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}},{"description":"789","boundingPoly":{"vertices":[{"x":10,"y":7},{"x":85,"y":9},{"x":85,"y":18},{"x":50,"y":16}]}}];
+  Logger.log(getRawScoresFromAnnotations(annotations));
+}
+function getRawScoresFromAnnotations(annotations) {
+  var scores = [], i = 0;
+  
+  var regex = /^(\d{3,5})$/;
+  while (scores.length < 3 && i < annotations.length) {
+    var match = regex.exec(annotations[i].description);
+    if (match) {
+      if (annotations[i].boundingPoly.vertices[0].y < 50) {
+        scores.push(match[1]);
+      } else {
+        console.log('found ' + annotations[i].description + ' at '+annotations[i].boundingPoly.vertices[0].y)
+      }
+    }
+    i++;
+  }
+
+  return scores
+}
+
+
+function testGetRates() {
+  var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
+  var imgData = downloadImg(imgUrl);
+
+  var i =0;
+  do {
+    var vision = visionAPI(imgData);
+    var fullText = vision.responses[0].fullTextAnnotation.text;
+    Logger.log(fullText.split('\n').join());
+
+    var rates = getRates(fullText);
+    Logger.log(rates)
+
+    i++;
+  } while (rates.length !== 3 && i < 3);
+
+  Logger.log((rates.length == 3)?'Yeah':'Nope');
+  Logger.log(rates);
+}
+function getRates(fullText) {
+  var rates = [];
+  var regex = /\+(\d{1,2})\/min/;
+  fullText.split('\n').forEach(function(value) {
+    var match = regex.exec(value);
+    if (match) {
+      rates.push(match[1]);
+    }
+  });
+  
+  return rates;
+}
+
+
+function testDownloadImg() {
+  console.log(downloadImg('https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B'));
+}
+function downloadImg(imgUrl) {
+  var http = UrlFetchApp.fetch(imgUrl);
+  var imgData = Utilities.base64Encode(http.getBlob().getBytes());
+  
+  return imgData;
 }
 
 
@@ -153,21 +241,26 @@ function formatAnswer(guilds) {
   var secondPlace = guilds[1];
   var loser = guilds[2];
   
+  var headers = "Si ces informations sont bonnes :\n";
+  guilds.forEach(function(guild) {
+    headers += "- "+guild.team+" : "+ guild.points +" points, +"+ guild.rate +"/min\n";
+  });
+  headers += '\n';
+
   var sentence = "";
   if (winner.team == 'bleue') {
     sentence = "Nous gagnerons"
   } else {
-    sentence = "La guilde " + winner.team + " gagnera";
+    sentence = "La guilde " + winner.team + " ("+winner.points+" points, +"+ winner.rate +"/min) gagnera";
   }
   
-  var headers = "/!\\ Si rien ne change :\n";
   var winnerText = sentence + " dans " + winner.winsIn + " minutes.\n"
-  
+
   var secondPlaceText = "La seconde place est pour ";
   if (secondPlace.team == 'bleue') {
     secondPlaceText += "nous."
   } else {
-    secondPlaceText += "la guilde " + secondPlace.team +".";
+    secondPlaceText += "la guilde " + secondPlace.team +" ("+secondPlace.points+" points, +"+secondPlace.rate+"/min).";
   }
   
   var finalAnswer = headers  + winnerText + secondPlaceText;
