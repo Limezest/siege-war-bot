@@ -38,12 +38,7 @@ function computeImage(imgUrl) {
 
     try {
       var annotations = vision.responses[0].textAnnotations;
-      console.log('annotations');
-      console.log(JSON.stringify(annotations));
-      
       var rawScores = getRawScoresFromAnnotations(annotations);
-      console.log('rawScores');
-      console.log(JSON.stringify(rawScores));
 
       var scores = annotations.filter(function(annotation) {
         return (rawScores.indexOf(annotation.description) != -1);
@@ -101,7 +96,7 @@ function testVisionAPI() {
   var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
   var imgData = downloadImg(imgUrl);
   var vision = visionAPI(imgData);
-  console.log(JSON.stringify(vision));
+  Logger.log(JSON.stringify(vision));
 }
 function visionAPI(imgData) {
   var visionAPIURL = 'https://vision.googleapis.com/v1/images:annotate';
@@ -254,7 +249,7 @@ function formatAnswer(guilds) {
     sentence = "La guilde " + winner.team + " ("+winner.points+" points, +"+ winner.rate +"/min) gagnera";
   }
   
-  var winnerText = sentence + " dans " + winner.winsIn + " minutes.\n"
+  var winnerText = sentence + " dans " + formatWinsIn(winner.winsIn) + ".\n"
 
   var secondPlaceText = "La seconde place est pour ";
   if (secondPlace.team == 'bleue') {
@@ -266,4 +261,17 @@ function formatAnswer(guilds) {
   var finalAnswer = headers  + winnerText + secondPlaceText;
   console.log(finalAnswer)
   return String(finalAnswer);
+}
+
+function testFormatWinsIn() {
+  var winsIn = 239;
+  Logger.log(formatWinsIn(winsIn));
+}
+function formatWinsIn(winsIn) {
+  var hours = ~~(winsIn/60);
+  var minutes = winsIn - (hours * 60);
+  Logger.log(hours + ' heures');
+  Logger.log(minutes + ' min');
+  
+  return hours+' heures et '+minutes;
 }
