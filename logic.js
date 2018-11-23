@@ -19,6 +19,7 @@ function computeMessage(message) {
 
 function testComputeImage() {
   var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
+  var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46494678_305886200023717_1299993545737764864_n.jpg?_nc_cat=104&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=c991d68279ed47128bfff591ef43f9f6&oe=5C6E5D2F';
   Logger.log(computeImage(imgUrl));
 }
 function computeImage(imgUrl) {
@@ -38,18 +39,24 @@ function computeImage(imgUrl) {
 
     try {
       var annotations = vision.responses[0].textAnnotations;
+      
       var rawScores = getRawScoresFromAnnotations(annotations);
-
       var scores = annotations.filter(function(annotation) {
         return (rawScores.indexOf(annotation.description) != -1);
       });
-      console.log('scores');
-      console.log(JSON.stringify(scores));
+      Logger.log('après le filter');
+      Logger.log('scores');
+      Logger.log(JSON.stringify(scores));
 
-      scores.sort(function(a, b) {
-        if (!a) return false;
-        return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
-      });
+      if (scores.length > 3) {
+        scores = scores.filter(unique);
+      }
+      
+      scores.sort(sortLeftToRight);
+      //      (function(a, b) {
+      //        if (!a) return false;
+      //        return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
+      //      });
       console.log('new scores, sorted');
       console.log(JSON.stringify(scores));
       
@@ -65,6 +72,7 @@ function computeImage(imgUrl) {
       console.log('----------');
       var rates = getRates(fullText);
       if (rates.length !== 3) { throw new Error('Je ne trouve pas les taux.'); }
+      rates.sort(sortLeftToRight);
     } catch(e) {
       console.error(e.message);
       throw new Error('Je n\'arrive pas à trouver toutes les infos...');
@@ -85,11 +93,23 @@ function computeImage(imgUrl) {
     
     return scores;
   } catch(e) {
-    Logger.log(JSON.stringify(e));
+    console.error(JSON.stringify(e));
     throw new Error(e.message);
   }
 }
 
+function sortLeftToRight(a, b) {
+  if (!a) return false;
+  return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
+}
+
+function testUnique() {
+  var scores = [{"description":"3345","boundingPoly":{"vertices":[{"x":640,"y":9},{"x":663,"y":10},{"x":663,"y":21},{"x":640,"y":20}]}},{"description":"2758","boundingPoly":{"vertices":[{"x":65,"y":9},{"x":88,"y":10},{"x":88,"y":21},{"x":65,"y":20}]}},{"description":"1362","boundingPoly":{"vertices":[{"x":353,"y":9},{"x":375,"y":9},{"x":375,"y":21},{"x":353,"y":21}]}},{"description":"3345","boundingPoly":{"vertices":[{"x":635,"y":6},{"x":663,"y":6},{"x":663,"y":31},{"x":635,"y":31}]}}];
+  Logger.log(scores.filter(unique));
+}
+function unique() {
+  Logger.log(this);
+}
 
 /***********/
 function testVisionAPI() {
@@ -127,8 +147,6 @@ function testScores() {
   });
   
   return scores.sort(function(a, b) {
-    Logger.log(a);
-    Logger.log(b);
     if (!a) return false;
     return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
   });
@@ -154,7 +172,8 @@ function getRawScoresFromAnnotations(annotations) {
     }
     i++;
   }
-
+  Logger.log('IN RAW SCOOOOORES');
+  Logger.log(scores);
   return scores
 }
 
@@ -175,12 +194,12 @@ function testGetRates() {
     i++;
   } while (rates.length !== 3 && i < 3);
 
-  Logger.log((rates.length == 3)?'Yeah':'Nope');
+  Logger.log(rates.length == 3);
   Logger.log(rates);
 }
 function getRates(fullText) {
   var rates = [];
-  var regex = /\+(\d{1,2})\/min/;
+  var regex = /(\d{1,2})\/min/;
   fullText.split('\n').forEach(function(value) {
     var match = regex.exec(value);
     if (match) {
@@ -263,6 +282,7 @@ function formatAnswer(guilds) {
   return String(finalAnswer);
 }
 
+
 function testFormatWinsIn() {
   var winsIn = 239;
   Logger.log(formatWinsIn(winsIn));
@@ -273,5 +293,5 @@ function formatWinsIn(winsIn) {
   Logger.log(hours + ' heures');
   Logger.log(minutes + ' min');
   
-  return hours+' heures et '+minutes;
+  return hours+' heures et '+minutes+' minutes';
 }
