@@ -21,6 +21,23 @@ function doGet(e) {
   }
 }
 
+function testDoPost() {
+var e = { parameter: {},
+  contextPath: '',
+  contentLength: 323,
+  queryString: '',
+  parameters: {},
+  postData: 
+   { type: 'application/json',
+     length: 323,
+     contents: '"{\\"entry\\":[{\\"messaging\\":[{\\"sender\\":{\\"id\\":\\"DISCORD\\"},\\"message\\":{\\"attachments\\":[{\\"payload\\":{\\"url\\":\\"https://scontent-cdg2-1.xx.fbcdn.net/v/t1.15752-0/p480x480/54279487_375318096392806_7613155880955019264_n.jpg?_nc_cat=111&_nc_ht=scontent-cdg2-1.xx&oh=c4854d8535d65224f01abe96651eb25d&oe=5D5BC7A5\\"}}]}}]}]}"',
+     name: 'postData' } };
+  var postContent = e.postData.contents;
+  var content = JSON.parse(JSON.parse(postContent));
+  Logger.log(content.entry[0]);
+  //Logger.log(doPost(e));
+}
+
 
 /**
  *  Handle user request
@@ -32,7 +49,6 @@ function doPost(e) {
     var content = JSON.parse(postContent);
     console.log(content);
     var messaging = content.entry[0].messaging[0];
-    
     var senderId = messaging.sender.id;
     
     //  If message has an attachment, try computing image
@@ -45,7 +61,6 @@ function doPost(e) {
         var results = computeImage(imgUrl);
         console.log(JSON.stringify(results));
       } catch (e) {
-        sendTextMessage(senderId, e.message);
         console.log("--- END REQUEST ---");
         return;
       }
@@ -58,16 +73,15 @@ function doPost(e) {
         var results = computeMessage(messageText);
       } else {
         var errorMessage = "Format text : (points +rate) x 3\nEx: 12000 +10 10000 +14 7000 +9";
-        sendTextMessage(senderId, errorMessage);
         console.log("--- END REQUEST ---");
         return;
       }
     }
-
-    sendTextMessage(senderId, formatAnswer(results));
+    
+    return ContentService.createTextOutput(sendTextMessage(senderId, formatAnswer(results)));
   } catch(e) {
     console.error(JSON.stringify(e));
-    sendTextMessage(senderId, "Déso j'ai buggé :))");
+    return ContentService.createTextOutput(sendTextMessage(senderId, "Déso j'ai buggé :))"));
   }
   
   console.log("--- END REQUEST ---");

@@ -3,6 +3,19 @@ function testSendTextMessage() {
   sendTextMessage(userId, 'test');
 }
 function sendTextMessage(senderId, text) {
+  switch (senderId.toLowerCase()) {
+    case 'discord':
+      return replyToDiscord(senderId, text);
+    default:
+      replyToMessenger(senderId, text);
+  };
+}
+
+
+function replyToDiscord(senderID, text) {
+  return text;
+}
+function replyToMessenger(senderId, text) {
   var url = 'https://graph.facebook.com/v2.6/me/messages?access_token=' + FACEBOOK_ACCESS_TOKEN;
 
   var message = {

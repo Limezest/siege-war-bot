@@ -18,8 +18,7 @@ function computeMessage(message) {
 
 
 function testComputeImage() {
-  var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
-  var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46494678_305886200023717_1299993545737764864_n.jpg?_nc_cat=104&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=c991d68279ed47128bfff591ef43f9f6&oe=5C6E5D2F';
+  var imgUrl = 'https://cdn.discordapp.com/attachments/573051902497914880/574925751044931595/Screenshot_20190506-134822.jpg'
   Logger.log(computeImage(imgUrl));
 }
 function computeImage(imgUrl) {
@@ -44,45 +43,38 @@ function computeImage(imgUrl) {
       var scores = annotations.filter(function(annotation) {
         return (rawScores.indexOf(annotation.description) != -1);
       });
-      Logger.log('après le filter');
-      Logger.log('scores');
-      Logger.log(JSON.stringify(scores));
 
       if (scores.length > 3) {
         scores = scores.filter(unique);
       }
-      
+
       scores.sort(sortLeftToRight);
-      //      (function(a, b) {
-      //        if (!a) return false;
-      //        return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
-      //      });
       console.log('new scores, sorted');
       console.log(JSON.stringify(scores));
-      
+
       scores = scores.map(function(annotation) {
         return { points: annotation.description };
       });
       if (scores.length !== 3) { throw new Error('Je ne trouve pas les scores'); }
-      
+  
       var fullText = vision.responses[0].fullTextAnnotation.text;
       console.log('----------');
       console.log('fullText');
       console.log(fullText);
       console.log('----------');
-      var rates = getRates(fullText);
+      var rates = getRawRates(fullText);
       if (rates.length !== 3) { throw new Error('Je ne trouve pas les taux.'); }
-      rates.sort(sortLeftToRight);
+      //  rates.sort(sortLeftToRight); // TODO: RawRates are plain text rates, next step is getting rates coordinates and sort
     } catch(e) {
       console.error(e.message);
       throw new Error('Je n\'arrive pas à trouver toutes les infos...');
     }
 
-    scores[0].team = 'bleue';
+    scores[0].team = 'blue';
     scores[0].rate = rates[0];
-    scores[1].team = 'rouge';
+    scores[1].team = 'red';
     scores[1].rate = rates[1];
-    scores[2].team = 'jaune';
+    scores[2].team = 'yellow';
     scores[2].rate = rates[2];
 
     scores.forEach(function(guild) {
@@ -178,8 +170,8 @@ function getRawScoresFromAnnotations(annotations) {
 }
 
 
-function testGetRates() {
-  var imgUrl = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B';
+function testGetRawRates() {
+  var imgUrl = 'https://cdn.discordapp.com/attachments/573051902497914880/574925751044931595/Screenshot_20190506-134822.jpg';
   var imgData = downloadImg(imgUrl);
 
   var i =0;
@@ -188,7 +180,7 @@ function testGetRates() {
     var fullText = vision.responses[0].fullTextAnnotation.text;
     Logger.log(fullText.split('\n').join());
 
-    var rates = getRates(fullText);
+    var rates = getRawRates(fullText);
     Logger.log(rates)
 
     i++;
@@ -197,7 +189,7 @@ function testGetRates() {
   Logger.log(rates.length == 3);
   Logger.log(rates);
 }
-function getRates(fullText) {
+function getRawRates(fullText) {
   var rates = [];
   var regex = /(\d{1,2})\/min/;
   fullText.split('\n').forEach(function(value) {
@@ -255,26 +247,26 @@ function formatAnswer(guilds) {
   var secondPlace = guilds[1];
   var loser = guilds[2];
   
-  var headers = "Si ces informations sont bonnes :\n";
+  var headers = "_Beep boop_ 🤖\nDouble-check this facts:\n";
   guilds.forEach(function(guild) {
-    headers += "- "+guild.team+" : "+ guild.points +" points, +"+ guild.rate +"/min\n";
+    headers += "- "+guild.team+" guild : "+ guild.points +" points, +"+ guild.rate +"/min\n";
   });
-  headers += '\n';
+  headers += '\nif (true) then:\n';
 
-  var sentence = "";
-  if (winner.team == 'bleue') {
-    sentence = "Nous gagnerons"
+  var sentence = "🥇 ";
+  if (winner.team == 'blue') {
+    sentence += "We will win";
   } else {
-    sentence = "La guilde " + winner.team + " ("+winner.points+" points, +"+ winner.rate +"/min) gagnera";
+    sentence += proper(winner.team) + " guild ("+winner.points+" points, +"+ winner.rate +"/min) will win";
   }
   
-  var winnerText = sentence + " dans " + formatWinsIn(winner.winsIn) + ".\n"
+  var winnerText = sentence + " in " + formatWinsIn(winner.winsIn) + ".\n"
 
-  var secondPlaceText = "La seconde place est pour ";
-  if (secondPlace.team == 'bleue') {
-    secondPlaceText += "nous."
+  var secondPlaceText = "🥈 Second place is for ";
+  if (secondPlace.team == 'blue') {
+    secondPlaceText += "us."
   } else {
-    secondPlaceText += "la guilde " + secondPlace.team +" ("+secondPlace.points+" points, +"+secondPlace.rate+"/min).";
+    secondPlaceText += secondPlace.team +" guild ("+secondPlace.points+" points, +"+secondPlace.rate+"/min).";
   }
   
   var finalAnswer = headers  + winnerText + secondPlaceText;
@@ -290,8 +282,12 @@ function testFormatWinsIn() {
 function formatWinsIn(winsIn) {
   var hours = ~~(winsIn/60);
   var minutes = winsIn - (hours * 60);
-  Logger.log(hours + ' heures');
+  Logger.log(hours + ' hours');
   Logger.log(minutes + ' min');
   
-  return hours + ' heures et ' + minutes + ' minutes';
+  return hours+' hours and '+minutes+' minutes';
+}
+
+function proper(str) {
+  return str.charAt(0).toUpperCase() + str.substr(1).toLowerCase();
 }
