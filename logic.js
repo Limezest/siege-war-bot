@@ -27,7 +27,7 @@ function computeImage(imgUrl) {
     if (!imgData) throw new Error();
   } catch(e) {
     console.error('error downloading image');
-    throw new Error('Impossible de télécharger l\'image');
+    throw new Error('Couldn\'t fetch the image');
   }
   
   try {
@@ -38,7 +38,6 @@ function computeImage(imgUrl) {
 
     try {
       var annotations = vision.responses[0].textAnnotations;
-      
       var rawScores = getRawScoresFromAnnotations(annotations);
       var scores = annotations.filter(function(annotation) {
         return (rawScores.indexOf(annotation.description) != -1);
@@ -55,33 +54,47 @@ function computeImage(imgUrl) {
       scores = scores.map(function(annotation) {
         return { points: annotation.description };
       });
-      if (scores.length !== 3) { throw new Error('Je ne trouve pas les scores'); }
+      if (scores.length !== 3) { throw new Error('I couldn\'t find scores :('); }
   
       var fullText = vision.responses[0].fullTextAnnotation.text;
-      console.log('----------');
-      console.log('fullText');
-      console.log(fullText);
-      console.log('----------');
-      var rates = getRawRates(fullText);
-      if (rates.length !== 3) { throw new Error('Je ne trouve pas les taux.'); }
-      //  rates.sort(sortLeftToRight); // TODO: RawRates are plain text rates, next step is getting rates coordinates and sort
+      
+      //  only returns an array of numbers extracted based on regex (like +XX/min)
+      var rawRates = getRawRates(fullText);
+      //  if (rates.length !== 3) { throw new Error('I couldn\'t find rates, please make sure they\'re visible'); }
+      
+      //  Extract from annotations the corresponding full objects (containing vertices)
+      var fullRateAnnotations = annotations.filter(function(annotation) {
+        return (rawRates.indexOf(annotation.description) != -1);
+      });
+      
+      var rates = getRates(fullRateAnnotations).map(function(id) {
+        //  For top 3 closest points, retrieve annotation objects
+        return fullRateAnnotations[id];
+      });
+      
+      rates.sort(sortLeftToRight).map(function(point) {
+        return point.description;
+      });
+      
+      console.log('rates');
+      console.log(rates);
     } catch(e) {
       console.error(e.message);
-      throw new Error('Je n\'arrive pas à trouver toutes les infos...');
+      throw new Error('I couldn\'t find anything :(\nPlease make sure you clicked on the score banner at the top of the screen to reveal rates.');
     }
 
     scores[0].team = 'blue';
-    scores[0].rate = rates[0];
+    scores[0].rate = rates[0].description;
     scores[1].team = 'red';
-    scores[1].rate = rates[1];
+    scores[1].rate = rates[1].description;
     scores[2].team = 'yellow';
-    scores[2].rate = rates[2];
+    scores[2].rate = rates[2].description;
 
     scores.forEach(function(guild) {
       guild.winsIn = winsIn(guild.points, guild.rate);
     }, this);
     console.log(JSON.stringify(scores));
-    if (scores.some(function(score) { return (score.winsIn == 0); })) { throw new Error('Probablement une erreur...'); }
+    if (scores.some(function(score) { return (score.winsIn == 0); })) { throw new Error('I must have made a mistake...'); }
     
     return scores;
   } catch(e) {
@@ -95,12 +108,11 @@ function sortLeftToRight(a, b) {
   return (a.boundingPoly.vertices[0].x - b.boundingPoly.vertices[0].x);
 }
 
-function testUnique() {
-  var scores = [{"description":"3345","boundingPoly":{"vertices":[{"x":640,"y":9},{"x":663,"y":10},{"x":663,"y":21},{"x":640,"y":20}]}},{"description":"2758","boundingPoly":{"vertices":[{"x":65,"y":9},{"x":88,"y":10},{"x":88,"y":21},{"x":65,"y":20}]}},{"description":"1362","boundingPoly":{"vertices":[{"x":353,"y":9},{"x":375,"y":9},{"x":375,"y":21},{"x":353,"y":21}]}},{"description":"3345","boundingPoly":{"vertices":[{"x":635,"y":6},{"x":663,"y":6},{"x":663,"y":31},{"x":635,"y":31}]}}];
-  Logger.log(scores.filter(unique));
+function byDistance(a, b) {
+  return b.distance < a.distance;
 }
-function unique() {
-  Logger.log(this);
+function bySum(a, b) {
+  return b.sum < a.sum;
 }
 
 /***********/
@@ -203,6 +215,76 @@ function getRawRates(fullText) {
 }
 
 
+function testGetRates() {
+  var rawRates = [{"description":"12","boundingPoly":{"vertices":[{"x":112,"y":144},{"x":139,"y":144},{"x":139,"y":180},{"x":112,"y":180}]}},{"description":"11","boundingPoly":{"vertices":[{"x":882,"y":142},{"x":912,"y":142},{"x":911,"y":182},{"x":881,"y":182}]}},{"description":"23","boundingPoly":{"vertices":[{"x":1646,"y":142},{"x":1675,"y":142},{"x":1675,"y":182},{"x":1646,"y":182}]}},{"description":"11","boundingPoly":{"vertices":[{"x":1278,"y":227},{"x":1314,"y":226},{"x":1315,"y":266},{"x":1279,"y":267}]}},{"description":"12","boundingPoly":{"vertices":[{"x":1376,"y":808},{"x":1399,"y":808},{"x":1399,"y":829},{"x":1376,"y":829}]}}];
+  Logger.log(getRates(rawRates));
+}
+function getRates(rawRates) {
+  //  Compute middle height for an annotation
+  var store = rawRates.map(function(rate, index) {
+    middle = __meanHeight(rate.boundingPoly.vertices);
+  
+    return {
+      id: index,
+      value: rate.description,
+      middle: middle
+    };
+  });
+  
+  
+  //  Compute distance for pairs of annotations
+  //+ Keep 2 closest points
+  var closestNeighbors = store.map(function(currentPoint) {
+    var diff = store.map(function(otherPoint) {
+      return {
+        pair: [currentPoint.id, otherPoint.id],
+        distance: Math.abs(otherPoint.middle - currentPoint.middle)
+      }
+    });
+    return diff.sort(byDistance).slice(0,2);
+  });
+  
+  
+  //  Sum distances for 2 closest points
+  //+ Keep top 3 closest annotations
+  var sum = closestNeighbors.map(function(pair) {
+    pair.sum = pair.reduce(function(a, b) {
+      return a.distance + b.distance;
+    });
+    return pair;
+  });
+  var top3 = sum.sort(bySum).slice(0,3);
+  
+  // Create set from top 3 (unique ids) 
+  var points = [];
+  top3.forEach(function(neighbors) {
+    neighbors.slice(0,2).forEach(function(neighbor) {
+      neighbor.pair.forEach(function(point) {
+        if (points.indexOf(point) == -1) {
+          points.push(point);
+        }
+      });
+    });
+  });
+  
+  return points;
+}
+
+
+function testMeanHeight() {
+  var vertices = [{"x": 112,"y": 144},{"x": 139,"y": 144},{"x": 139,"y": 180},{"x": 112,"y": 180}];
+  Logger.log(__meanHeight(vertices));
+}
+function __meanHeight(vertices) {
+  var sum = 0;
+  vertices.forEach(function(point) {
+    sum += point.y;
+  });
+
+  return sum / vertices.length;
+}
+
+
 function testDownloadImg() {
   console.log(downloadImg('https://scontent.xx.fbcdn.net/v/t1.15752-9/46197012_342667866297603_1541296877285146624_n.jpg?_nc_cat=105&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=67cd255d47a7baf20ad559cf40e4cfab&oe=5C73409B'));
 }
@@ -247,7 +329,7 @@ function formatAnswer(guilds) {
   var secondPlace = guilds[1];
   var loser = guilds[2];
   
-  var headers = "_Beep boop_ 🤖\nDouble-check this facts:\n";
+  var headers = "_Beep boop_ 🤖\nDouble-check these facts first:\n";
   guilds.forEach(function(guild) {
     headers += "- "+guild.team+" guild : "+ guild.points +" points, +"+ guild.rate +"/min\n";
   });
@@ -264,7 +346,7 @@ function formatAnswer(guilds) {
 
   var secondPlaceText = "🥈 Second place is for ";
   if (secondPlace.team == 'blue') {
-    secondPlaceText += "us."
+    secondPlaceText += "us. "
   } else {
     secondPlaceText += secondPlace.team +" guild ("+secondPlace.points+" points, +"+secondPlace.rate+"/min).";
   }
